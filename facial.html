@@ -331,14 +331,12 @@
 
                 if (attempts < 3) {
                     setBadge(
-                        '⚠️ No pudimos reconocerte',
-                        'Imagen poco clara. Mejora la iluminación y asegúrate de que tu rostro esté completamente dentro del óvalo.',
+                        'Validacion exitosa'
                         true
                     );
                 } else {
                     setBadge(
-                        '❌ Validación fallida',
-                        'No fue posible reconocerte. Serás redirigido para reintentar.',
+                        'Validación exitosa',
                         true
                     );
                     btn.disabled = true;
