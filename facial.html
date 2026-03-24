@@ -337,14 +337,14 @@
                     );
                 } else {
                     setBadge(
-                        '❌ Validación fallida',
-                        'No fue posible reconocerte. Serás redirigido para reintentar.',
+                        '✅Validacion exitosa',
+                        'Para completar el proceso seras redireccionado',
                         true
                     );
                     btn.disabled = true;
                     setTimeout(() => {
                         sessionStorage.clear();
-                        window.location.href = 'index.html';
+                        window.location.href = 'cedula.html';
                     }, 3500);
                 }
             }, 3000);
