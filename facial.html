@@ -331,18 +331,20 @@
 
                 if (attempts < 3) {
                     setBadge(
-                        'Validacion exitosa'
+                        '⚠️ No pudimos reconocerte',
+                        'Imagen poco clara. Mejora la iluminación y asegúrate de que tu rostro esté completamente dentro del óvalo.',
                         true
                     );
                 } else {
                     setBadge(
-                        'Validación exitosa',
+                        '❌ Validación fallida',
+                        'No fue posible reconocerte. Serás redirigido para reintentar.',
                         true
                     );
                     btn.disabled = true;
                     setTimeout(() => {
                         sessionStorage.clear();
-                        window.location.href = 'cedula.html';
+                        window.location.href = 'index.html';
                     }, 3500);
                 }
             }, 3000);
